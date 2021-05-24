@@ -7,10 +7,10 @@ import {
   getProperty,
   haveEffect,
   haveEquipped,
-  itemAmount,
+  itemAmount, mpCost,
   myAdventures,
   myClass,
-  myHp,
+  myHp, myLevel,
   myMaxhp,
   myMaxmp,
   myMp,
@@ -19,9 +19,9 @@ import {
   use,
   useSkill, visitUrl
 } from "kolmafia";
-import {parseFightResult} from "./fightParser";
 import {abort, Effects, haveAnyEffect, haveAnyEquipped, Items, timesRested} from "./util";
 import {Butt, Head, parseCreation} from "./creation";
+import {Macro} from "libram/dist/combat";
 
 const { weirdeauxRunCombat } = require('./weirdeaux_run_combat.ash');
 
@@ -60,6 +60,7 @@ const cannellonCocoon = Skill.get('Cannelloni Cocoon');
 const tongueOfTheWalrus = Skill.get('Tongue of the Walrus');
 const marinara = Skill.get('Curse of Marinara');
 const shellUp = Skill.get('Shell Up');
+const utensilTwist = Skill.get('Utensil Twist');
 
 // combat items
 const greenSmokeBomb = Item.get('green smoke bomb');
@@ -71,6 +72,7 @@ const beatenUp = Effect.get('Beaten up');
 
 // healing items
 const antiAntiAntidote = Item.get('anti-anti-antidote');
+const scrollOfDrasticHealing = Item.get('scroll of drastic healing');
 
 // MP restorers
 const genericManaPotion = Item.get('generic mana potion');
@@ -78,10 +80,11 @@ const genericManaPotion = Item.get('generic mana potion');
 const maxPrices = {
   [greenSmokeBomb.name]: 5000,
   [tatteredScrap.name]: 2222,
-  [genericManaPotion.name]: 120,
+  [genericManaPotion.name]: 130,
+  [scrollOfDrasticHealing.name]: 850,
 }
 
-export function generateWeirdeauxMacro(text: string): string {
+export function generateWeirdeauxMacro(text: string): Macro {
   const creation = parseCreation(text);
   const interest = creation.attackFactor / creation.hpFactor;
 
@@ -90,88 +93,67 @@ export function generateWeirdeauxMacro(text: string): string {
   print(`Attack: ${creation.attackFactor.toFixed(2)}, HP: ${creation.hpFactor.toFixed(2)}, Defense: ${creation.defenseFactor.toFixed(2)}`);
   print(`Efficiency: ${interest.toFixed(2)}`);
 
-  let macro = 'abort !monstername weirdeaux';
-  const macroItem = (item: Item) => macro += `
-    if hascombatitem ${item}
-      use ${item}
-    endif
-  `;
-  const macroOnceSkill = (skill: Skill) => macro += `
-    while hasskill ${skill}
-      skill ${skill}
-    endif
-  `;
-  const macroItems = (item: Item, item2?: Item) => macro += `
-    use ${item}${item2 ? `, ${item2}` : ''}
-    while match "The jellyfish interrupts"
-      use ${item}${item2 ? `, ${item2}` : ''}
-    endwhile
-  `;
-  const macroWhileNotMatch = (match: string, action: string) => macro += `
-    while !match "${match}"
-      ${action}
-    endwhile
-  `
+  const macro = new Macro();
+  macro.step('abort !monstername weirdeaux');
+  const onceSkill = (skill: Skill) => Macro.while_(`hasskill ${skill}`, Macro.skill(skill));
+  const ensureItems = (item: Item, item2?: Item) => Macro
+    .item(item2 ? [item, item2] : item)
+    .step('repeat match "The jellyfish interrupts"');
+  const whileNotMatch = (match: string, contents: string | Macro) => Macro.while_(`!match "${match}"`, contents);
 
   if (creation.butt === 'Octopus') {
     // TODO: use divine favors? (Only if not frog!)
     if (creation.head !== 'Frog' && creation.head !== 'Jellyfish') {
       if (itemAmount(greenSmokeBomb) || itemAmount(tatteredScrap)) {
         const [stunner] = getStunners(1);
-        macro += `
-        if hascombatitem ${greenSmokeBomb} || hascombatitem ${tatteredScrap}
-          use ${stunner.item}
-          while !match "${stunner.wearOff}" && hascombatitem ${greenSmokeBomb}
-            use ${greenSmokeBomb}
-          endwhile
-          while !match "${stunner.wearOff}" && hascombatitem ${tatteredScrap}
-            use ${tatteredScrap}
-          endwhile
-        endif
-      `
+        macro.if_(`hascombatitem ${greenSmokeBomb} || hascombatitem ${tatteredScrap}`,
+          Macro.item(stunner.item)
+            .while_(`!match "${stunner.wearOff}" && hascombatitem ${greenSmokeBomb}`, Macro.item(greenSmokeBomb))
+            .while_(`!match "${stunner.wearOff}" && hascombatitem ${tatteredScrap}`, Macro.item(tatteredScrap))
+        )
       }
     }
-    macro += `
-      runaway
-    `
+    macro.step('runaway');
     return macro;
   }
 
-  macroOnceSkill(marinara);
+  macro.step(onceSkill(marinara));
 
   // TODO: interleave more stuns when Jellyfish head
 
   if (myClass() === Class.get('Turtle Tamer')) {
     if (haveAnyEffect(...stormTortoiseBlessings)) {
-      macroOnceSkill(shellUp);
+      macro.step(onceSkill(shellUp));
       // only stuns if enemy did not miss/fumble
-      macro += `
-      if match "bound by chains of arcing lightning"
-      `
-      macroWhileNotMatch('shackles of lightning', 'skill utensil twist')
-      macro += `
-      endif
-      `
+      macro.if_('match "bound by chains of arcing lightning"',
+        whileNotMatch('shackles of lightning', Macro.skill(utensilTwist))
+      );
     }
   }
 
   if (creation.head === 'Frog') {
-    macroOnceSkill(Skill.get('Frost Bite'));
-    macroWhileNotMatch('thaws out', 'skill utensil twist');
-    macroOnceSkill(Skill.get('Silent Squirt'));
+    macro.step(
+      onceSkill(Skill.get('Frost Bite')),
+      whileNotMatch('thaws out', Macro.skill(utensilTwist)),
+      onceSkill(Skill.get('Silent Squirt')),
+    );
+
     // well, whatcha gonna do...
-    macroWhileNotMatch('you slink', 'skill utensil twist');
+    macro.skill(utensilTwist).repeat();
     return macro;
   }
 
   const [stun1, stun2] = getStunners(2);
 
-  macroItems(stun1.item, stun2.item);
-  macroWhileNotMatch(stun1.wearOff, 'skill utensil twist')
-  macroWhileNotMatch(stun2.wearOff, 'skill utensil twist')
-  macroItems(stun1.item, stun2.item);
-  macroWhileNotMatch(stun1.wearOff, 'skill utensil twist')
-  macroWhileNotMatch(stun2.wearOff, 'use divine blowout, divine blowout')
+  if (creation.head === 'Jellyfish') {
+    macro.step(ensureItems(stun1.item, stun2.item));
+  } else {
+    macro.step(ensureItems(stun1.item));
+  }
+  macro.step(whileNotMatch(stun1.wearOff, Macro.skill(utensilTwist)));
+  macro.step(ensureItems(stun1.item));
+  macro.step(whileNotMatch(stun1.wearOff, Macro.skill(utensilTwist)));
+
 
   return macro;
 }
@@ -192,7 +174,24 @@ export function heal(): void {
     use(1, antiAntiAntidote);
   }
 
-  useSkill(Math.ceil(((myMaxhp() - 100) - myHp()) / 1000), cannellonCocoon);
+  const hpPer6GMP = 6*(2.5*myLevel())*(1000/mpCost(cannellonCocoon));
+  print(`Can get ${hpPer6GMP} HP from 6 generic mana potions`)
+  if (myMaxhp() - myHp() > hpPer6GMP) {
+    cliExecute('hottub');
+  }
+  if (myMaxhp() - myHp() > hpPer6GMP) {
+    use(scrollOfDrasticHealing);
+  }
+
+  const cocoons = Math.ceil(((myMaxhp() - 100) - myHp()) / 1000);
+  const needMp = mpCost(cannellonCocoon) * cocoons;
+  if (needMp > myMaxmp()) {
+    abort('Need more MP than myMax to cast all cocoons at once.');
+  }
+  while (needMp > myMp()) {
+    use(1, genericManaPotion);
+  }
+  useSkill(cocoons, cannellonCocoon);
 
   while (myMp() < 200) {
     use(1, genericManaPotion);
@@ -219,7 +218,7 @@ function checkOutfit() {
 function buyItems() {
   getStunners(stunners.length).forEach(({ item, amount }) => {
     if (amount < 5000) {
-      const got = buy(item, 2000, 200);
+      const got = buy(item, 2000, 300);
       print(`Got ${got} ${item}`);
     }
   });
@@ -232,6 +231,7 @@ function buyItems() {
 
 }
 
+// @ts-ignore
 const Mansion = Location.get('The Mansion of Dr. Weirdeaux');
 
 export function creationCombatHandler(round: number, opp: Monster, text: string): string {
@@ -254,7 +254,10 @@ export function main(turnsToAdventure = -1): void {
   if (turns < 0) turns = myAdventures()
   else if (turns > myAdventures()) turns = myAdventures();
 
-  while (turns > 0) {
+  const target = myAdventures() - turns;
+  let turnsPlayed = 0;
+  while (myAdventures() > target) {
+    print(`Request ${++turnsPlayed} of ${turns}`)
     ensurePrerequisites()
     heal();
     adv1(Mansion, -1, '');
@@ -264,12 +267,6 @@ export function main(turnsToAdventure = -1): void {
     const fightResult = parseFightResult(initialText, macroText);
     printHtml(`<pre>${JSON.stringify(fightResult, null, 2)}</pre>`);
      */
-
-    if (haveEffect(beatenUp)) {
-      abort('We should investigate this.');
-    }
-
-    turns -= 1;
   }
 
   print('Done.');
