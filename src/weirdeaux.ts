@@ -141,14 +141,17 @@ export function generateWeirdeauxMacro(text: string): Macro {
 
   const [stun1, stun2] = getStunners(2);
 
+  let stun;
   if (creation.head === 'Jellyfish') {
+    stun = stun1;
     macro.step(ensureItems(stun1.item, stun2.item));
   } else {
-    macro.step(ensureItems(stun1.item));
+    stun = stun2.amount > stun1.amount ? stun2 : stun1;
+    macro.step(ensureItems(stun.item));
   }
-  macro.step(whileNotMatch(stun1.wearOff, Macro.skill(utensilTwist)));
-  macro.step(ensureItems(stun1.item));
-  macro.step(whileNotMatch(stun1.wearOff, Macro.skill(utensilTwist)));
+  macro.step(whileNotMatch(stun.wearOff, Macro.skill(utensilTwist)));
+  macro.step(ensureItems(stun.item));
+  macro.step(whileNotMatch(stun.wearOff, Macro.skill(utensilTwist)));
 
 
   return macro;
