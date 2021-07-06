@@ -23,8 +23,6 @@ import {abort, Effects, haveAnyEffect, haveAnyEquipped, Items, timesRested} from
 import {Butt, Head, parseCreation} from "./creation";
 import {Macro} from "libram/dist/combat";
 
-const { weirdeauxRunCombat } = require('./weirdeaux_run_combat.ash');
-
 // must be sorted by order of effect
 const stunners = [{
   item: Item.get('CSA obedience grenade'),
@@ -261,12 +259,6 @@ export function main(turnsToAdventure = -1): void {
     ensurePrerequisites()
     heal();
     adv1(Mansion, -1, '');
-    /*
-    const initialText = visitUrl(toUrl(Mansion));
-    const macroText = runCombat('creationCombatHandler') || weirdeauxRunCombat();
-    const fightResult = parseFightResult(initialText, macroText);
-    printHtml(`<pre>${JSON.stringify(fightResult, null, 2)}</pre>`);
-     */
   }
 
   print('Done.');
