@@ -70,7 +70,6 @@ const beatenUp = Effect.get('Beaten up');
 
 // healing items
 const antiAntiAntidote = Item.get('anti-anti-antidote');
-const scrollOfDrasticHealing = Item.get('scroll of drastic healing');
 
 // MP restorers
 const genericManaPotion = Item.get('generic mana potion');
@@ -79,7 +78,6 @@ const maxPrices = {
   [greenSmokeBomb.name]: 5000,
   [tatteredScrap.name]: 2222,
   [genericManaPotion.name]: 130,
-  [scrollOfDrasticHealing.name]: 850,
 }
 
 export function generateWeirdeauxMacro(text: string): Macro {
@@ -176,9 +174,6 @@ export function heal(): void {
   print(`Can get ${hpPer6GMP} HP from 6 generic mana potions`)
   if (myMaxhp() - myHp() > hpPer6GMP) {
     cliExecute('hottub');
-  }
-  if (myMaxhp() - myHp() > hpPer6GMP) {
-    use(scrollOfDrasticHealing);
   }
 
   const cocoons = Math.ceil(((myMaxhp() - 100) - myHp()) / 1000);
