@@ -11,7 +11,7 @@
   "author": "Bernhard Frauendienst <kol@nospam.obeliks.de>",
   "license": "GPL-3.0",
   "dependencies": {
-    "kolmafia": "^1.0.6",
+    "kolmafia": "^1.0.11",
     "libram": "0.0.8",
     "parse5": "^6.0.1",
     "tslib": "^2.2.0",
